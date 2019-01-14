@@ -7,9 +7,24 @@ Attribute VB_Name = "Layouts"
 Sub layoutFromCSV()
 
 
-    Dim FilePath As String
-    Open "C:\Users\Big Cell Engraver\Desktop\LayoutData.csv" For Input As #1
+    Dim LayoutDataPath As String
+    Dim NodePath As String
+    Dim TranslatorPath As String
+    LayoutDataPath = "C:\Users\Michelle\Documents\LayoutData.csv"
+    NodePath = "C:\Program Files\nodejs\node"
+    TranslatorPath = "C:\Users\Michelle\Documents\ADASignageBrailleTranslator\src\model\main.js"
+    
+    Open LayoutDataPath For Input As #1 ' File Path
 
+
+    ' Determine if we should enforce california braille
+    Dim enforceCaliforniaBraille As Integer
+    enforceCaliforniaBraille = 0
+    Line Input #1, LineFromFile
+    LineItems = Split(LineFromFile, ",")
+    If LineItems(1) = "yes" Then
+        enforceCaliforniaBraille = 1
+    End If
 
 
     ' Determine spacing for layout
@@ -18,6 +33,7 @@ Sub layoutFromCSV()
     LineItems = Split(LineFromFile, ",")
 
     spacing = LineItems(1)
+
 
     ' Determine layout width from csv
     Dim layoutWidth As Double
@@ -39,6 +55,26 @@ Sub layoutFromCSV()
     xOffset = 0
     xCounter = ActiveSelection.SizeWidth + spacing
     yOffset = 0
+    
+    ' HERE We want to create an array that will store all of the transformations we need to make
+    Dim brailleText() As String
+    Dim brailleObjects As New ShapeRange
+    Dim brailleAlignments() As Double
+    Dim brailleReplacements() As String
+ 
+    Dim brailleCounter As Integer
+    brailleCounter = 0
+    
+    Dim objectPosition() As Integer
+    Dim multipleReplacementsCounter As Integer
+    multipleReplacementsCounter = 0
+    
+    ' Create variables to keep track of the sign number
+    Dim signNumber As Integer
+    signNumber = 1
+    Dim textShrinks() As String
+    Dim numOfTextShrinks As Integer
+    numOfTextShrink = 0
 
     Do Until EOF(1)
 
@@ -88,7 +124,7 @@ Sub layoutFromCSV()
                 Dim index As Integer
                 For index = 1 To 7
                     If sh.Text.Story = "Text" + CStr(index) Then
-
+                        
                         ' Check to see if we are passing empty cells
                         If LineItems(index - 1) = "" Then
                             tempRange.Delete
@@ -133,6 +169,10 @@ Sub layoutFromCSV()
                         End If
 
                         If (maxWidth < sh.SizeWidth) Then
+                            ' Let the user know we shrunk this text object
+                            ReDim Preserve textShrinks(numOfTextShrinks)
+                            textShrinks(numOfTextShrinks) = CStr(signNumber)
+                            numOfTextShrinks = numOfTextShrinks + 1
                             Call sh.SetSize(maxWidth, sh.SizeHeight)
                         End If
 
@@ -151,14 +191,18 @@ Sub layoutFromCSV()
                         End If
 
 
-
+            
                     End If
                 Next index
+                
 
                 ' LOOP THROUGH ALL POSSIBLE BRAILLE VARIABLES
+                Dim numBrailleReplacements As Integer
+                numBrailleReplacements = 0
                 For index = 1 To 7
                     Dim braille As String
                     braille = "Braille" & CStr(index)
+                    
                     If InStr(sh.Text.Story, braille) Then
                         
                         
@@ -169,32 +213,31 @@ Sub layoutFromCSV()
                             Exit Sub
                         End If
                         
-                        ' Set the braille
-                        Dim cmd As String
-                        
-                        cmd = "cmd.exe /c echo " & LineItems(index - 1) & " |  ""C:\Program Files\nodejs\node"" ""C:\Users\Big Cell Engraver\Documents\ADASignageBrailleTranslator\src\model\main.js"""
-                        Dim oShell As Object
-                        Set oShell = CreateObject("WScript.Shell")
-
-                        Dim oExec As Object
-                        Dim oOutput As Object
-
-                        Set oExec = oShell.Exec(cmd)
-                        Set oOutput = oExec.StdOut
                         
                         
-                        Dim sLine As String
-                        sLine = oOutput.ReadLine
-
-                        Dim newLineText As String
-                        newLineText = Replace(sh.Text.Story, braille, sLine)
+                        ' Add the braille object and the braille string to the array
+                        ReDim Preserve brailleText(brailleCounter)
+                        ReDim Preserve brailleReplacements(brailleCounter)
+                        ReDim Preserve objectPosition(brailleCounter)
+                        ReDim Preserve brailleAlignments(brailleCounter)
+                        brailleText(brailleCounter) = LineItems(index - 1)
+                        brailleReplacements(brailleCounter) = braille
+                        brailleAlignments(brailleCounter) = alignmentPos
+                        brailleObjects.Add sh
                         
-
-                        sh.Text.Story = newLineText
+                        ' Ensure were tracking the correct position of the braille object
+                        If numBrailleReplacements <> 0 Then
+                            multipleReplacementsCounter = multipleReplacementsCounter + 1
+                        End If
+                        
+                        objectPosition(brailleCounter) = brailleCounter - multipleReplacementsCounter
+                        brailleCounter = brailleCounter + 1
+                        
+                        numBrailleReplacements = numBrailleReplacements + 1
                
 
                         ' Check for california compliance
-                        If sh.Text.Story.Font <> "CA Compliant Braille 060" Then
+                        If sh.Text.Story.Font <> "CA Compliant Braille 060" And enforceCaliforniaBraille <> 0 Then
                             MsgBox ("Not California Braille Compliant")
                             Close #1
                             Exit Sub
@@ -202,21 +245,7 @@ Sub layoutFromCSV()
 
 
 
-                    ' Adjusting Alignment for the sign
-                        If sh.Text.Story.Alignment = cdrCenterAlignment Then
-                            sh.CenterX = alignmentPos
-
-                        ElseIf sh.Text.Story.Alignment = cdrLeftAlignment Then
-                            sh.LeftX = alignmentPos
-
-                        ElseIf sh.Text.Story.Alignment = cdrRightAlignment Then
-                            sh.RightX = alignmentPos
-
-                        Else
-                            MsgBox ("Specify an alignment for the braille")
-                            Close #1
-                            Exit Sub
-                        End If
+                    
                     End If
                 Next index
 
@@ -224,10 +253,72 @@ Sub layoutFromCSV()
 
 
        Next sh
-
+       signNumber = signNumber + 1
        tempRange.CreateSelection
+       
+       
+       
 
     Loop
+
+    ' Lets see if we got all of our braille objects
+    ' Don't forget to put alignment here
+    
+    ' Set the braille
+    Dim cmd As String
+    Dim brailleCommand As String
+    brailleCommand = Join(brailleText, "~")
+    
+    cmd = "cmd.exe /c echo " & brailleCommand & " | " & """" & NodePath & """" & " " & """" & TranslatorPath & """"
+
+    Dim oShell As Object
+    Set oShell = CreateObject("WScript.Shell")
+
+    Dim oExec As Object
+    Dim oOutput As Object
+
+    Set oExec = oShell.Exec(cmd)
+    Set oOutput = oExec.StdOut
+    
+    
+    Dim sLine As String
+    sLine = oOutput.ReadLine
+    
+    ' We want to loop through each braille translation we made and replace it in the appropriate text object
+    Dim translations() As String
+    translations = Split(sLine, "~")
+    Dim i As Integer
+    For i = 0 To UBound(translations) - LBound(translations) ' + 1
+        ' Here is where we want to actually make the translation
+    
+        Dim brailleObj As Shape
+        Set brailleObj = brailleObjects.Shapes(objectPosition(i) + 1)
+        brailleObj.Text.Story = Replace(brailleObj.Text.Story, brailleReplacements(i), translations(i))
+        
+        ' Now we want to make the alignment adjustments
+        If brailleObj.Text.Story.Alignment = cdrCenterAlignment Then
+            brailleObj.CenterX = brailleAlignments(i)
+
+        ElseIf brailleObj.Text.Story.Alignment = cdrLeftAlignment Then
+            brailleObj.LeftX = brailleAlignments(i)
+
+        ElseIf sh.Text.Story.Alignment = cdrRightAlignment Then
+            brailleObj.RightX = brailleAlignments(i)
+
+        Else
+            MsgBox ("Specify an alignment for the braille")
+            Close #1
+            Exit Sub
+        End If
+    Next i
+    
+    ' Let the user know where we shrunk text
+    Dim shrinkMessage As String
+    shrinkMessage = Join(textShrinks, ", ")
+    If shrinkMessage <> "" Then
+        MsgBox ("Shrunk text on signs: " & shrinkMessage)
+    End If
+    
 
     Close #1
 
