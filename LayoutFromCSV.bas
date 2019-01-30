@@ -78,7 +78,7 @@ Sub layoutFromCSV()
 
     Do Until EOF(1)
 
-        If xCounter + ActiveSelection.SizeWidth + spacing > layoutWidth Then
+        If xCounter + ActiveSelection.SizeWidth > layoutWidth Then
             xOffset = 0 - xCounter + ActiveSelection.SizeWidth + spacing
             xCounter = ActiveSelection.SizeWidth + spacing
             yOffset = 0 - ActiveSelection.SizeHeight - spacing
@@ -108,7 +108,7 @@ Sub layoutFromCSV()
                 Dim alignmentPos As Double
                 If sh.Text.Story.Alignment = cdrCenterAlignment Then
 
-                    alignmentPos = sh.CenterX
+                    alignmentPos = sh.centerX
                 End If
 
                 If sh.Text.Story.Alignment = cdrLeftAlignment Then
@@ -134,7 +134,15 @@ Sub layoutFromCSV()
 
 
                         ' Set the text
-                        sh.Text.Story = LineItems(index - 1)
+                        If LineItems(index - 1) = "delete" Then
+                            ' Something goes here
+                            sh.Text.Story = ""
+                            
+                        Else
+                            sh.Text.Story = LineItems(index - 1)
+                        
+                        End If
+                        
 
                         ' Adjusting Width for the text
                         Dim maxWidth As Double
@@ -179,7 +187,7 @@ Sub layoutFromCSV()
 
                         ' Adjusting Alignment for the sign
                         If sh.Text.Story.Alignment = cdrCenterAlignment Then
-                            sh.CenterX = alignmentPos
+                            sh.centerX = alignmentPos
                         End If
 
                         If sh.Text.Story.Alignment = cdrLeftAlignment Then
@@ -212,6 +220,9 @@ Sub layoutFromCSV()
                             Close #1
                             Exit Sub
                         End If
+                        
+                        
+                        
                         
                         
                         
@@ -293,11 +304,20 @@ Sub layoutFromCSV()
     
         Dim brailleObj As Shape
         Set brailleObj = brailleObjects.Shapes(objectPosition(i) + 1)
-        brailleObj.Text.Story = Replace(brailleObj.Text.Story, brailleReplacements(i), translations(i))
+        
+        Dim storyText As String
+        storyText = brailleObj.Text.Story
+        If InStr(storyText, "delete") Then
+            brailleObj.Text.Story = Replace(brailleObj.Text.Story, brailleReplacements(i), "")
+            
+        Else
+             brailleObj.Text.Story = Replace(brailleObj.Text.Story, brailleReplacements(i), translations(i))
+        End If
+       
         
         ' Now we want to make the alignment adjustments
         If brailleObj.Text.Story.Alignment = cdrCenterAlignment Then
-            brailleObj.CenterX = brailleAlignments(i)
+            brailleObj.centerX = brailleAlignments(i)
 
         ElseIf brailleObj.Text.Story.Alignment = cdrLeftAlignment Then
             brailleObj.LeftX = brailleAlignments(i)
